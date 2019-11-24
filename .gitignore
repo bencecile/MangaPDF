@@ -1,0 +1,5 @@
+**/target/
+**/*.rs.bk
+
+image_split/split_info.json
+manga_pdf/run_info.json
