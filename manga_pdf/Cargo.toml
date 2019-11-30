@@ -5,7 +5,7 @@ authors = ["Benjamin Cecile <bencecile@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-lib_pdf = { path = "../lib_pdf" }
+lib_stream_pdf = { path = "../lib_stream_pdf" }
 
 rayon = "1.2.0"
 serde = { version = "1.0.101", features = ["derive"] }

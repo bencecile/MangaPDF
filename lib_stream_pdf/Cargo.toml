@@ -1,5 +1,5 @@
 [package]
-name = "lib_pdf"
+name = "lib_stream_pdf"
 version = "0.1.0"
 authors = ["Benjamin Cecile <bencecile@gmail.com>"]
 edition = "2018"
@@ -7,5 +7,5 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-image = "0.22.2"
-lopdf = "0.23.0"
+flate2 = "1.0.13"
+image = "0.22.3"

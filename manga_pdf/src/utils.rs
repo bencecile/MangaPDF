@@ -18,6 +18,12 @@ pub fn read_json_file<T: DeserializeOwned>(path: impl AsRef<Path>) -> Result<T, 
     Ok(json_object)
 }
 
+pub fn file_name(path: &Path) -> &str {
+    path.file_name().unwrap()
+        .to_str().unwrap()
+}
+pub fn compare_file_name(path: &Path, other: &str) -> bool { file_name(path) == other }
+
 pub fn natural_sort_pathbuf(path1: &PathBuf, path2: &PathBuf) -> Ordering {
     natural_sort(path1.to_str().unwrap(), path2.to_str().unwrap())
 }
