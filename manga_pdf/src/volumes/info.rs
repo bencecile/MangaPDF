@@ -7,8 +7,6 @@ use super::{POINTS_PER_MM};
 
 #[derive(Deserialize)]
 pub struct VolumeInfo {
-    /// The path to the folder of images
-    image_folder: String,
     /// The name of the output PDF (without the extension)
     save_name: String,
     title: String,
@@ -31,16 +29,14 @@ impl VolumeInfo {
     }
     pub fn chapter_list(&self) -> &[ChapterInfo] { &self.chapters }
     pub fn page_image_infos(&self) -> Vec<PageImageInfo> {
-        let image_folder = Path::new(&self.image_folder);
         // Ignore any empty page lists to make my life easier when making the info JSONs
         self.page_info.iter().filter_map(|page_info| {
             if page_info.images.is_empty() {
                 None
             } else {
-                let images = page_info.images.iter().map(|image| {
-                    let image_path = image_folder.join(image);
+                let images = page_info.images.iter().map(|image_path| {
                     let is_lossless = self.is_image_lossless(&image_path);
-                    (image_path, is_lossless)
+                    (image_path.clone(), is_lossless)
                 }).collect();
                 Some(PageImageInfo {
                     image_gap: page_info.image_gap,
@@ -79,7 +75,7 @@ struct PageInfo {
     /// The percentage gap between each page in a wide page (1 is 100% of the total original width)
     image_gap: f64,
     /// Have a list of tupled image names that need to be combined (0: left -> len: right) together for an extra wide page (見開き)
-    images: Vec<String>,
+    images: Vec<PathBuf>,
 }
 pub struct PageImageInfo {
     image_gap: f64,
