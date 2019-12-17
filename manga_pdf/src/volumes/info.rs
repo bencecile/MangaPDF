@@ -87,12 +87,12 @@ impl PageImageInfo {
         self.images.iter()
             .any(|(image, _)| crate::utils::compare_file_name(image, file_name))
     }
-    pub fn make_pdf_images(&self) -> Result<Vec<PDFImage>, String> {
+    pub fn make_pdf_images(&self) -> Result<Vec<(PDFImage, &Path)>, String> {
         let mut pdf_images = Vec::new();
         for (image_path, lossless) in self.images.iter() {
             let pdf_image = PDFImage::from_path(&image_path, *lossless)
                 .map_err(|e| format!("Failed to make the image: {:?}", e))?;
-            pdf_images.push(pdf_image);
+            pdf_images.push( (pdf_image, image_path.as_path()) );
         }
         Ok(pdf_images)
     }

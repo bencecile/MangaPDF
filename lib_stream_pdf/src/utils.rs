@@ -7,6 +7,10 @@ use flate2::{
 };
 use crate::{PDFResult};
 
+pub const DELIMITER_CHARS: &'static [u8] = &[
+    b'(', b')', b'<', b'>', b'[', b']', b'{', b'}', b'/', b'%'
+];
+
 pub fn flate_compress(to_compress: &[u8], size_hint: Option<usize>) -> PDFResult< Vec<u8> > {
     let compress_vec = {
         if let Some(size_hint) = size_hint { Vec::with_capacity(size_hint) }

@@ -2,7 +2,10 @@ use std::{
     collections::{BTreeMap},
     io::{Write},
 };
-use crate::{PDFResult};
+use crate::{
+    PDFResult,
+    utils::{DELIMITER_CHARS},
+};
 
 #[derive(Debug, Clone)]
 pub enum Object {
@@ -143,6 +146,7 @@ impl Name {
     pub fn filter() -> Name { Name::new("Filter") }
     pub fn first() -> Name { Name::new("First") }
     pub fn flate_decode() -> Name { Name::new("FlateDecode") }
+    pub fn font() -> Name { Name::new("Font") }
     pub fn image() -> Name { Name::new("Image") }
     pub fn info() -> Name { Name::new("Info") }
     pub fn height() -> Name { Name::new("Height") }
@@ -162,6 +166,7 @@ impl Name {
     pub fn subtype() -> Name { Name::new("Subtype") }
     pub fn title() -> Name { Name::new("Title") }
     pub fn type_name() -> Name { Name::new("Type") }
+    pub fn type1() -> Name { Name::new("Type1") }
     pub fn width() -> Name { Name::new("Width") }
     pub fn xobject() -> Name { Name::new("XObject") }
 }
@@ -173,7 +178,7 @@ impl Name {
         for byte in self.0.bytes() {
             if byte == b'#' {
                 converted.write_all(b"#23")?;
-            } else if (0x21 <= byte && byte <= 0x7E) && !super::DELIMITER_CHARS.contains(&byte) {
+            } else if (0x21 <= byte && byte <= 0x7E) && !DELIMITER_CHARS.contains(&byte) {
                 converted.push(byte);
             } else {
                 write!(&mut converted, "#{:X}", byte)?;

@@ -1,9 +1,15 @@
+mod text;
+pub use self::{
+    text::{TextContent, TextLayout, TextMetrics},
+};
+
 use std::{
     io::{Write},
 };
 use crate::{
     PDFResult,
     Name, Dictionary, Stream, Object, ObjectId, ImageRef, PageRef,
+    Justify,
 };
 
 pub struct PDFPage {
@@ -22,14 +28,16 @@ impl PDFPage {
     }
 
     pub fn add_full_width_image(&mut self, image_ref: ImageRef) {
-        self.add_image(image_ref, 0.0, 1.0);
+        self.add_image(image_ref, 0.0, 1.0, Justify::Center);
     }
-    pub fn add_image(&mut self, image_ref: ImageRef, start_x_percent: f64, end_x_percent: f64) {
+    /// Justify will use the left as the start.
+    pub fn add_image(&mut self, image_ref: ImageRef, start_x_percent: f64, end_x_percent: f64,
+    justify: Justify) {
         let start_x = self.width * start_x_percent;
         let end_x = self.width * end_x_percent;
         let image_width_on_page = end_x - start_x;
         // We want to keep the image at the same ratio so it won't get stretched
-        let (scale_width, scale_height, x, y) = {
+        let (scale_width, scale_height, mut x, y) = {
             let pdf_page_ratio = image_width_on_page / self.height;
             let image_ratio = (image_ref.width as f64) / (image_ref.height as f64);
 
@@ -49,6 +57,12 @@ impl PDFPage {
                 (image_width_on_page, new_height, start_x, leftover_height / 2.0)
             }
         };
+        match justify {
+            Justify::Start => { x = start_x; },
+            Justify::End => { x = end_x - scale_width; },
+            // It's already centered and space between is the same as center here
+            _ => (),
+        }
         // Make a new graphics frame so that we can easily change the view matrix
         self.add_instruction("q", Vec::new());
         // Translate it first
@@ -64,6 +78,11 @@ impl PDFPage {
         self.add_instruction("Q", Vec::new());
 
         self.xobject_dictionary.insert(image_ref.ref_name, image_ref.id);
+    }
+
+    pub fn text_layout<'a>(&'a mut self,
+    text_rect: (f64, f64, f64, f64), metrics: TextMetrics) -> TextLayout<'a> {
+        self::text::new_text_layout(text_rect, metrics, self)
     }
 
     pub fn make_content_stream(&self) -> PDFResult<Stream> {

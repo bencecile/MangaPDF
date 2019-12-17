@@ -3,34 +3,49 @@ use std::{
     path::{Path},
 };
 use lib_stream_pdf::{
-    DocumentWriter, PDFPage, ImageRef,
+    DocumentWriter, PDFPage, ImageRef, Justify,
     PageRef, OutlineItem,
 };
-use super::info::{ChapterInfo, VolumeInfo, PageImageInfo};
+use super::{
+    info::{ChapterInfo, VolumeInfo, PageImageInfo},
+    stats::{Stats, ImageStats},
+};
 
 pub fn make_volume(info: VolumeInfo, out_dir: impl AsRef<Path>) -> Result<(), String> {
     let save_path = info.save_path(out_dir);
     let (page_width, page_height) = info.dimensions_in_device_space();
     let mut outline_holders = OutlineItemHolder::from_chapter_infos(info.chapter_list());
 
+    let mut stats = Stats::new();
+
     // Create any missing directories
     fs::create_dir_all(save_path.parent().unwrap())
         .map_err(|e| format!("Failed to mkdirs for {}. {}", save_path.display(), e))?;
     let mut doc_writer = DocumentWriter::stream_to_file(&save_path, true)
         .map_err(|e| format!("Failed to open the document writer: {:?}", e))?;
+    // TODO Implement some stat gathering
     for page_image_info in info.page_image_infos() {
         let mut pdf_image_refs = Vec::new();
-        for pdf_image in page_image_info.make_pdf_images()? {
-            let pdf_image_ref = doc_writer.add_image(pdf_image)
+        for (pdf_image, image_path) in page_image_info.make_pdf_images()? {
+            let pdf_start_size = doc_writer.file_position()
+                .map_err(|e| format!("Failed to get the starting file position ({:?}", e))?;
+
+                let pdf_image_ref = doc_writer.add_image(pdf_image)
                 .map_err(|e| format!("Failed to add the image: {:?}", e))?;
             pdf_image_refs.push(pdf_image_ref);
+
+            let pdf_end_size = doc_writer.file_position()
+                .map_err(|e| format!("Failed to get the ending file position ({:?})", e))?;
+            stats.add_image_stats(
+                ImageStats::new(image_path, pdf_end_size - pdf_start_size)
+                    .map_err(|e| format!("Failed to make new image stats for {:?} ({:?})",
+                        image_path, e))?
+            );
         }
         if pdf_image_refs.is_empty() {
             return Err("A page can't be empty (aka. without images)".to_string());
         }
 
-        // We'll want a double wide page to fit the extra images (if any)
-        let page_width = if pdf_image_refs.len() > 1 { page_width * 2.0 } else { page_width };
         let pdf_page = layout_page(
             pdf_image_refs, page_image_info.image_gap(), page_width, page_height
         );
@@ -59,7 +74,13 @@ pub fn make_volume(info: VolumeInfo, out_dir: impl AsRef<Path>) -> Result<(), St
     let document_info = info.make_document_info();
     doc_writer.finish_writing(outline_items, document_info)
         .map_err(|e| format!("Failed to finish writing: {:?}", e))?;
-    // NOTE We may want stats
+
+    stats.set_total_pdf_size(fs::metadata(&save_path).unwrap().len());
+    let stats_file = save_path.parent().unwrap()
+        .join(format!("{}.stats", crate::utils::file_name(&save_path)));
+    stats.write_stats_to_file(&stats_file)
+        .map_err(|e| format!("Failed to write the stats file {:?} ({:?})", &stats_file, e))?;
+    println!("Wrote the stats file to {}", stats_file.display());
 
     Ok(())
 }
@@ -83,13 +104,12 @@ impl OutlineItemHolder {
         }).collect()
     }
 
-    fn apply_if_matching_page(&mut self, page_info: &PageImageInfo, page_ref: PageRef) -> bool {
+    /// Explicitly match any and all children without returning early
+    fn apply_if_matching_page(&mut self, page_info: &PageImageInfo, page_ref: PageRef) {
         if page_info.has_image(&self.file_name) {
             self.page_ref = Some(page_ref);
-            true
-        } else {
-            apply_to_holders_if_matching_page(&mut self.children, page_info, page_ref)
         }
+        apply_to_holders_if_matching_page(&mut self.children, page_info, page_ref);
     }
 
     fn into_outline_item(self) -> Result<OutlineItem, String> {
@@ -107,24 +127,30 @@ impl OutlineItemHolder {
     }
 }
 fn apply_to_holders_if_matching_page(holders: &mut [OutlineItemHolder], page_info: &PageImageInfo,
-page_ref: PageRef) -> bool {
+page_ref: PageRef) {
     for holder in holders {
-        if holder.apply_if_matching_page(page_info, page_ref) {
-            return true;
-        }
+        holder.apply_if_matching_page(page_info, page_ref);
     }
-    false
 }
 
-fn layout_page(image_refs: Vec<ImageRef>, image_gap: f64, page_width: f64, page_height: f64)
+fn layout_page(image_refs: Vec<ImageRef>, image_gap: f64, mut page_width: f64, page_height: f64)
 -> PDFPage {
+    let num_images = image_refs.len();
     let total_image_width = image_refs.iter()
         .map(|image_ref| image_ref.dimensions().0)
         .sum::<u32>() as f64;
     let mut image_width_ratios: Vec<f64> = image_refs.iter()
         .map(|image_ref| image_ref.dimensions().0 as f64 / total_image_width)
         .collect();
-    let total_gap_width_percent = (image_refs.len() - 1) as f64 * image_gap;
+    let total_gap_width_percent = (num_images - 1) as f64 * image_gap;
+
+    // We'll want a double wide page to fit the extra image width (if any)
+    let largest_height = image_refs.iter()
+        .map(|image_ref| image_ref.dimensions().1)
+        .max().unwrap() as f64;
+    if total_image_width > largest_height {
+        page_width *= 2.0;
+    }
 
     let mut x_progress = if total_gap_width_percent.is_sign_negative() {
         // Since we will pull the images inwards from both sides (and only the 2 sides)
@@ -133,7 +159,7 @@ fn layout_page(image_refs: Vec<ImageRef>, image_gap: f64, page_width: f64, page_
     } else if total_gap_width_percent > 1e-5 {
         // We'll need to fix the image ratios since we'll need more width than just the raw images
         // Each image will have to split how much extra width we'll gain from the gaps
-        let width_loss_per_image = total_gap_width_percent / (image_refs.len() as f64);
+        let width_loss_per_image = total_gap_width_percent / (num_images as f64);
         for ratio in image_width_ratios.iter_mut() {
             *ratio -= width_loss_per_image;
         }
@@ -143,8 +169,19 @@ fn layout_page(image_refs: Vec<ImageRef>, image_gap: f64, page_width: f64, page_
     };
 
     let mut pdf_page = PDFPage::new(page_width, page_height);
-    for (image_ref, image_width_ratio) in image_refs.into_iter().zip(image_width_ratios) {
-        pdf_page.add_image(image_ref, x_progress, x_progress + image_width_ratio);
+    let image_iterator = image_refs.into_iter().zip(image_width_ratios).enumerate();
+    for (i, (image_ref, image_width_ratio)) in image_iterator {
+        let justify = if num_images == 1 {
+            Justify::Center
+        } else {
+            // Squish it towards the center
+            if i < (num_images / 2) {
+                Justify::End
+            } else {
+                Justify::Start
+            }
+        };
+        pdf_page.add_image(image_ref, x_progress, x_progress + image_width_ratio, justify);
         x_progress += image_width_ratio + image_gap;
     }
     pdf_page

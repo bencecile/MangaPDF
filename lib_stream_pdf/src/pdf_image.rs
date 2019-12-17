@@ -17,26 +17,38 @@ pub struct PDFImage {
 }
 impl PDFImage {
     pub fn from_path(image_path: impl AsRef<Path>, lossless: bool) -> PDFResult<PDFImage> {
+        let image_path = image_path.as_ref();
         let image_bytes = fs::read(image_path)?;
-        Self::from_bytes(image_bytes, lossless)
+        match Self::from_bytes(image_bytes, lossless) {
+            Err(PDFError::BadImageColourType(message)) => {
+                Err(PDFError::BadImageColourType(
+                    format!("{} path={}", message, image_path.display())
+                ))
+            },
+            other => other,
+        }
     }
     pub fn from_bytes(image_bytes: Vec<u8>, lossless: bool) -> PDFResult<PDFImage> {
         let image = image::load_from_memory(&image_bytes)?;
         let width = image.width();
         let height = image.height();
-        let colour_type = ColourType::from_image_colour_type(image.color())
-            .ok_or(PDFError::BadImageColourType)?;
 
         // Check if this is already a JPG image that we can use directly
         // We can unwrap it because we already know that we can read in the image
         match image::guess_format(&image_bytes)? {
-            ImageFormat::JPEG => Ok(PDFImage {
-                image_bytes,
-                width,
-                height,
-                image_type: ImageType::Jpg,
-                colour_type,
-            }),
+            ImageFormat::JPEG => {
+                let colour_type = ColourType::from_image_colour_type(image.color())
+                    .ok_or_else(|| PDFError::BadImageColourType(
+                        format!("colour={:?} width={} height={}", image.color(), width, height)
+                    ))?;
+                Ok(PDFImage {
+                    image_bytes,
+                    width,
+                    height,
+                    image_type: ImageType::Jpg,
+                    colour_type,
+                })
+            },
             _ => Self::from_image(image, lossless),
         }
     }

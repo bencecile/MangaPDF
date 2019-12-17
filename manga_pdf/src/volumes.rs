@@ -1,4 +1,5 @@
 mod info;
+mod stats;
 mod volume;
 
 use std::path::{Path};
