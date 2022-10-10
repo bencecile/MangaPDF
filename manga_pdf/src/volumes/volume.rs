@@ -23,7 +23,7 @@ pub fn make_volume(info: VolumeInfo, out_dir: impl AsRef<Path>) -> Result<(), St
         .map_err(|e| format!("Failed to mkdirs for {}. {}", save_path.display(), e))?;
     let mut doc_writer = DocumentWriter::stream_to_file(&save_path, true)
         .map_err(|e| format!("Failed to open the document writer: {:?}", e))?;
-    // TODO Implement some stat gathering
+
     for page_image_info in info.page_image_infos() {
         let mut pdf_image_refs = Vec::new();
         for (pdf_image, image_path) in page_image_info.make_pdf_images()? {
@@ -76,11 +76,8 @@ pub fn make_volume(info: VolumeInfo, out_dir: impl AsRef<Path>) -> Result<(), St
         .map_err(|e| format!("Failed to finish writing: {:?}", e))?;
 
     stats.set_total_pdf_size(fs::metadata(&save_path).unwrap().len());
-    let stats_file = save_path.parent().unwrap()
-        .join(format!("{}.stats", crate::utils::file_name(&save_path)));
-    stats.write_stats_to_file(&stats_file)
-        .map_err(|e| format!("Failed to write the stats file {:?} ({:?})", &stats_file, e))?;
-    println!("Wrote the stats file to {}", stats_file.display());
+    stats.write_stats(&mut std::io::stdout())
+        .map_err(|e| format!("Failed to write the stats ({:?})", e))?;
 
     Ok(())
 }

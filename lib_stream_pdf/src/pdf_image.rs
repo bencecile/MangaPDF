@@ -160,6 +160,7 @@ fn image_can_be_grayscale(image: &DynamicImage) -> bool {
     let y_steps = (0..STEP_COUNT).map(move |count| image_height * count / STEP_COUNT);
 
     for x in x_steps {
+        // Clone the y steps because it will be used on each x loop
         for y in y_steps.clone() {
             let pixel = image.get_pixel(x, y);
 

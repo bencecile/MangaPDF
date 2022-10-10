@@ -1,14 +1,12 @@
 mod common_types;
-mod font;
 mod objects;
 mod page;
 mod pdf_image;
 mod utils;
 pub use crate::{
     common_types::{Justify},
-    font::{PDFFont, FontDirection, FontLang},
     pdf_image::{PDFImage},
-    page::{PDFPage, TextContent, TextLayout, TextMetrics},
+    page::{PDFPage},
 };
 
 use std::{
@@ -20,10 +18,6 @@ use std::{
     path::{Path, PathBuf},
 };
 use image::{ImageError};
-use font_kit::{
-    error::{FontLoadingError},
-    font::{Font},
-};
 use crate::{
     objects::{
         Object, ObjectId, ObjectIdGenerator,
@@ -37,17 +31,9 @@ pub enum PDFError {
     BadImageColourType(String),
     ByteIndexTooLarge,
     FileAlreadyExists(PathBuf),
-    FontCantBeVertical,
-    FontFailedToLoad,
-    FontIsMissingChar(char),
-    FontMissing,
 
-    FontLoadingError(FontLoadingError),
     IOError(IOError),
     ImageError(ImageError),
-}
-impl From<FontLoadingError> for PDFError {
-    fn from(error: FontLoadingError) -> Self { Self::FontLoadingError(error) }
 }
 impl From<IOError> for PDFError {
     fn from(error: IOError) -> Self { Self::IOError(error) }
@@ -94,13 +80,6 @@ impl DocumentWriter {
         let image_stream = crate::pdf_image::make_image_stream(image);
         self.write_object_with_ref(image_id, image_stream)?;
         Ok(image_ref)
-    }
-    pub fn add_font(&mut self, font: PDFFont) -> PDFResult<FontRef> {
-        let font_id = self.id_generator.next(0);
-        let font_ref = crate::font::ref_from_font(font_id, &font);
-        let font_object = crate::font::make_font_object(font);
-        self.write_object_with_ref(font_id, font_object)?;
-        Ok(font_ref)
     }
     pub fn add_page(&mut self, page: PDFPage) -> PDFResult<PageRef> {
         let page_id = self.id_generator.next(0);
@@ -274,28 +253,6 @@ impl ImageRef {
     }
 }
 
-#[derive(Clone)]
-pub struct FontRef {
-    id: ObjectId,
-    font: Font,
-    direction: FontDirection,
-}
-impl FontRef {
-    fn direction(&self) -> FontDirection { self.direction }
-    /// Returns (origin_x, origin_y, width, height)
-    fn bounds_for_char(&self, c: char) -> PDFResult<(f64, f64, f64, f64)> {
-        let glyph_id = self.font.glyph_for_char(c)
-            .ok_or(PDFError::FontIsMissingChar(c))?;
-        // We've already searched for the glyph so we WILL get an outline
-        let outline_rect = self.font.typographic_bounds(glyph_id).unwrap();
-
-        let x = outline_rect.origin.x as f64;
-        let y = outline_rect.origin.y as f64;
-        let width = outline_rect.size.width as f64;
-        let height = outline_rect.size.height as f64;
-        Ok( (x, y, width, height) )
-    }
-}
 
 #[derive(Copy, Clone)]
 pub struct PageRef {

@@ -1,8 +1,3 @@
-mod text;
-pub use self::{
-    text::{TextContent, TextLayout, TextMetrics},
-};
-
 use std::{
     io::{Write},
 };
@@ -27,9 +22,6 @@ impl PDFPage {
         }
     }
 
-    pub fn add_full_width_image(&mut self, image_ref: ImageRef) {
-        self.add_image(image_ref, 0.0, 1.0, Justify::Center);
-    }
     /// Justify will use the left as the start.
     pub fn add_image(&mut self, image_ref: ImageRef, start_x_percent: f64, end_x_percent: f64,
     justify: Justify) {
@@ -78,11 +70,6 @@ impl PDFPage {
         self.add_instruction("Q", Vec::new());
 
         self.xobject_dictionary.insert(image_ref.ref_name, image_ref.id);
-    }
-
-    pub fn text_layout<'a>(&'a mut self,
-    text_rect: (f64, f64, f64, f64), metrics: TextMetrics) -> TextLayout<'a> {
-        self::text::new_text_layout(text_rect, metrics, self)
     }
 
     pub fn make_content_stream(&self) -> PDFResult<Stream> {

@@ -1,7 +1,7 @@
 use std::{
-    io::{BufWriter, Write},
+    io::{Write},
     path::{Path, PathBuf},
-    fs::{self, File},
+    fs::{self},
     time::{Instant},
 };
 
@@ -26,11 +26,6 @@ impl Stats {
         self.total_pdf_size = total_pdf_size;
     }
 
-    pub fn write_stats_to_file(&self, stat_path: impl AsRef<Path>) -> Result<(), String> {
-        let file = File::create(stat_path)
-            .map_err(|e| format!("Failed to open the file ({:?})", e))?;
-        self.write_stats(&mut BufWriter::new(file))
-    }
     pub fn write_stats<W: Write>(&self, writer: &mut W) -> Result<(), String> {
         let total_image_files_size = self.images.iter()
             .map(|image_stats| image_stats.file_size)
@@ -39,8 +34,6 @@ impl Stats {
             .map(|image_stats| image_stats.size_in_pdf)
             .sum::<u64>();
 
-        writer.write_all(b"----- Totals -----\n")
-            .map_err(|e| format!("Failed to write the totals header ({:?})", e))?;
         writeln!(writer, "Time Spent:              {:?}", self.start_time.elapsed())
             .map_err(|e| format!("Failed to write the time spent ({:?})", e))?;
         writeln!(writer, "Total PDF Size:          {}",
@@ -53,10 +46,10 @@ impl Stats {
             crate::utils::byte_size_string(total_image_in_pdf_size))
             .map_err(|e| format!("Failed to write the total image size in PDF ({:?})", e))?;
 
-        writer.write_all(b"----- Images -----\n")
-            .map_err(|e| format!("Failed to write the images header ({:?})", e))?;
         for image_stats in &self.images {
-            image_stats.write_stats(writer)?;
+            if image_stats.pdf_to_file_ratio > 1.01 || image_stats.pdf_to_file_ratio < 0.99 {
+                image_stats.write_stats(writer)?;
+            }
         }
         Ok(())
     }
@@ -80,16 +73,12 @@ impl ImageStats {
 }
 impl ImageStats {
     fn write_stats<W: Write>(&self, writer: &mut W) -> Result<(), String> {
-        writeln!(writer, "{}", self.path.display())
-            .map_err(|e| format!("Failed to write the path ({:?})", e))?;
-        writeln!(writer, "  File Size:              {}",
-            crate::utils::byte_size_string(self.file_size))
-            .map_err(|e| format!("Failed to write the file size ({:?})", e))?;
-        writeln!(writer, "  Size in PDF:            {}",
-            crate::utils::byte_size_string(self.size_in_pdf))
-            .map_err(|e| format!("Failed to write the size in the PDF ({:?})", e))?;
-        writeln!(writer, "  PDF-to-File Size Ratio: {:.3}", self.pdf_to_file_ratio)
-            .map_err(|e| format!("Failed to write the ratio ({:?})", e))?;
+        let file_name = self.path.file_name().unwrap();
+        let o_bytes = crate::utils::byte_size_string(self.file_size);
+        let n_bytes = crate::utils::byte_size_string(self.size_in_pdf);
+        let ratio = self.pdf_to_file_ratio;
+        writeln!(writer, "{:?} (Original {}, In-PDF {}, {:.3}x)", file_name, o_bytes, n_bytes, ratio)
+            .map_err(|e| format!("Failed to write the image stats ({:?})", e))?;
         Ok(())
     }
 }
