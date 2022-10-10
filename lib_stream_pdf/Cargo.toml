@@ -7,5 +7,5 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-flate2 = "1.0.13"
-image = "0.22.3"
+flate2 = "1.0.24"
+image = "0.24.4"

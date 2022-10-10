@@ -7,6 +7,6 @@ edition = "2018"
 [dependencies]
 lib_stream_pdf = { path = "../lib_stream_pdf" }
 
-rayon = "1.2.0"
-serde = { version = "1.0.101", features = ["derive"] }
-serde_json = "1.0.40"
+rayon = "1.5.3"
+serde = { version = "1.0.145", features = ["derive"] }
+serde_json = "1.0.86"

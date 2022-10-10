@@ -1,6 +1,7 @@
 use std::{
     path::{Path},
     fs,
+    io::{Cursor},
 };
 use image::{ColorType, DynamicImage, ImageFormat, ImageOutputFormat, GenericImageView};
 use crate::{
@@ -36,7 +37,7 @@ impl PDFImage {
         // Check if this is already a JPG image that we can use directly
         // We can unwrap it because we already know that we can read in the image
         match image::guess_format(&image_bytes)? {
-            ImageFormat::JPEG => {
+            ImageFormat::Jpeg => {
                 let colour_type = ColourType::from_image_colour_type(image.color())
                     .ok_or_else(|| PDFError::BadImageColourType(
                         format!("colour={:?} width={} height={}", image.color(), width, height)
@@ -58,7 +59,7 @@ impl PDFImage {
             // We will only grayscale non-colour images
             //  This should save some space for all of the images that are just black and white
             if image_can_be_grayscale(&image) {
-                (DynamicImage::ImageLuma8(image.to_luma()), ColourType::Gray)
+                (DynamicImage::ImageLuma8(image.to_luma8()), ColourType::Gray)
             } else {
                 (image, old_colour_type)
             }
@@ -67,19 +68,16 @@ impl PDFImage {
         // We need to make sure that the PDF can handle the image
         //  We can make it not use any weird color channels to accomplish this
         let (image, colour_type) = match image.color() {
-            ColorType::Gray(_) => (image, ColourType::Gray),
-            ColorType::RGB(_) => try_to_convert_to_grayscale(image, ColourType::RGB),
+            ColorType::L8 => (image, ColourType::Gray),
+            ColorType::Rgb8 => try_to_convert_to_grayscale(image, ColourType::RGB),
 
-            ColorType::GrayA(_) => (
-                DynamicImage::ImageLuma8(image.to_luma()),
+            ColorType::La8 => (
+                DynamicImage::ImageLuma8(image.to_luma8()),
                 ColourType::Gray
             ),
 
-            ColorType::Palette(_) |
-            ColorType::RGBA(_) |
-            ColorType::BGR(_) |
-            ColorType::BGRA(_) => try_to_convert_to_grayscale(
-                DynamicImage::ImageRgb8(image.to_rgb()),
+            _ => try_to_convert_to_grayscale(
+                DynamicImage::ImageRgb8(image.to_rgb8()),
                 ColourType::RGB
             ),
         };
@@ -90,14 +88,14 @@ impl PDFImage {
         let rough_size = (width * height) as usize;
 
         let (image_bytes, image_type) = if lossless {
-            let image_bytes = crate::utils::flate_compress(&image.raw_pixels(), Some(rough_size))?;
+            let image_bytes = crate::utils::flate_compress(image.as_bytes(), Some(rough_size))?;
             (image_bytes, ImageType::FlateLossless)
         } else {
             // Convert a JPG for virtually lossless
             //  But still have a decent file size reduction
-            let mut image_bytes = Vec::with_capacity(rough_size);
-            image.write_to(&mut image_bytes, ImageOutputFormat::JPEG(90))?;
-            (image_bytes, ImageType::Jpg)
+            let mut image_bytes = Cursor::new(Vec::with_capacity(rough_size));
+            image.write_to(&mut image_bytes, ImageOutputFormat::Jpeg(90))?;
+            (image_bytes.into_inner(), ImageType::Jpg)
         };
         Ok(PDFImage { image_bytes, width, height, image_type, colour_type })
     }
@@ -137,8 +135,8 @@ enum ColourType {
 impl ColourType {
     fn from_image_colour_type(color_type: ColorType) -> Option<ColourType> {
         match color_type {
-            ColorType::Gray(_) => Some(Self::Gray),
-            ColorType::RGB(_) => Some(Self::RGB),
+            ColorType::L8 => Some(Self::Gray),
+            ColorType::Rgb8 => Some(Self::RGB),
             _ => None,
         }
     }
